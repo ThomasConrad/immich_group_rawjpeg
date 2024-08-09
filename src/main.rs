@@ -34,7 +34,6 @@ struct Opt {
     #[arg(value_enum)]
     action: Action,
     #[arg(short, long)]
-    #[clap(default_value = "true")]
     dry_run: bool,
     #[arg(short, long)]
     endpoint: String,
