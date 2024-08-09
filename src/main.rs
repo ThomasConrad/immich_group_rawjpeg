@@ -1,7 +1,8 @@
 use chrono::DateTime;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
+use itertools::Itertools;
 use openapi::{
     apis::{
         assets_api::{delete_assets, update_assets},
@@ -14,20 +15,27 @@ use openapi::{
         TimeBucketSize,
     },
 };
-// use serde::{Deserialize, Serialize};
-use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter};
-use std::time::Duration;
+
 use thiserror::Error;
 use tracing::info;
 use uuid::Uuid;
 
+#[derive(ValueEnum, Debug, Clone)]
+#[clap(rename_all = "kebab_case")]
+enum Action {
+    Duplicates,
+    JpgArw,
+    Bursts,
+}
+
 #[derive(Parser, Clone)]
 struct Opt {
+    #[arg(value_enum)]
+    action: Action,
     #[arg(short, long)]
-    group: bool,
+    #[clap(default_value = "true")]
+    dry_run: bool,
     #[arg(short, long)]
     endpoint: String,
     #[arg(short, long)]
@@ -65,8 +73,8 @@ enum ClientError {
     DateTimeParse(#[from] chrono::ParseError),
     #[error("error joining task: {0}")]
     Join(#[from] tokio::task::JoinError),
-    #[error("error io: {0}")]
-    Io(#[from] io::Error),
+    #[error("error grouping assets: {0:?}")]
+    InvalidGroup((Vec<Uuid>, Uuid)),
 }
 
 impl<T> From<Error<T>> for ClientError
@@ -143,7 +151,10 @@ impl Client {
         .await?)
     }
 
-    async fn group_assets(&self, ids: Vec<Uuid>) -> Result<(), ClientError> {
+    async fn group_assets(&self, ids: Vec<Uuid>, parent: Uuid) -> Result<(), ClientError> {
+        if !ids.contains(&parent) {
+            return Err(ClientError::InvalidGroup((ids, parent)));
+        }
         Ok(update_assets(
             &self.configuration,
             AssetBulkUpdateDto {
@@ -156,81 +167,88 @@ impl Client {
     }
 }
 
-const CACHE_FILE: &str = "assets_cache.json";
-const CACHE_DURATION: Duration = Duration::from_secs(600); // 10 minutes
+async fn group_duplicates(
+    client: Client,
+    assets: &HashMap<Uuid, AssetResponseDto>,
+    dry_run: bool,
+) -> Result<(), ClientError> {
+    let mut assets_map: HashMap<_, Vec<Uuid>> = HashMap::new();
+    for (id, asset) in assets.iter() {
+        let date = DateTime::parse_from_rfc3339(&asset.file_created_at)?;
+        assets_map.entry(date).or_default().push(*id);
+    }
 
-async fn load_assets_from_cache() -> io::Result<HashMap<Uuid, AssetResponseDto>> {
-    let file = File::open(CACHE_FILE)?;
-    let reader = BufReader::new(file);
-    let assets: HashMap<Uuid, AssetResponseDto> = serde_json::from_reader(reader)?;
-    Ok(assets)
-}
+    // check for assets with same timestamp
+    for group in assets_map.into_iter() {
+        if group.1.len() > 1 {
+            // check that name is the same for all assets in the group
+            for id in &group.1 {
+                let asset = assets.get(id).unwrap();
+                if asset.original_file_name != assets.get(&group.1[0]).unwrap().original_file_name {
+                    continue;
+                }
+            }
 
-async fn save_assets_to_cache(assets: &HashMap<Uuid, AssetResponseDto>) -> io::Result<()> {
-    let file = File::create(CACHE_FILE)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer(writer, assets)?;
+            // group assets
+            info!("Grouping assets: {:?}", group.1);
+            if !dry_run {
+                client.group_assets(group.1.clone(), group.1[0]).await?;
+            }
+        }
+    }
     Ok(())
 }
 
-fn is_cache_valid() -> bool {
-    if let Ok(metadata) = fs::metadata(CACHE_FILE) {
-        if let Ok(modified) = metadata.modified() {
-            if let Ok(elapsed) = modified.elapsed() {
-                return elapsed < CACHE_DURATION;
-            }
-        }
-    }
-    false
-}
-
-#[tokio::main]
-async fn main() -> Result<(), ClientError> {
-    tracing_subscriber::fmt::init();
-
-    let opt = Opt::parse();
-
-    let configuration = Configuration::from(opt.clone());
-
-    let client = Client::new(configuration.clone());
-    let count = client.count_photos().await?;
-    info!("Library contatins {} photos.", count);
-
-    let assets = if is_cache_valid() {
-        load_assets_from_cache().await?
-    } else {
-        let mut assets = HashMap::with_capacity(count);
-        let buckets = client.get_buckets().await?;
-        let bar = ProgressBar::new(count as u64);
-        let mut tasks = FuturesUnordered::new();
-
-        for bucket in buckets {
-            let task = client.get_bucket(bucket);
-            tasks.push(task);
-        }
-
-        while let Some(result) = tasks.next().await.transpose().unwrap_or(None) {
-            bar.inc(result.len() as u64);
-            for asset in result {
-                let id = Uuid::parse_str(&asset.id)?;
-                assets.insert(id, asset);
-            }
-        }
-
-        save_assets_to_cache(&assets).await?;
-        bar.finish();
-        assets
-    };
-
-    // build binary tree
-    let mut assets_tree: BTreeMap<_, Vec<&Uuid>> = BTreeMap::new();
+async fn group_jpeg_arw(
+    client: Client,
+    assets: &HashMap<Uuid, AssetResponseDto>,
+    dry_run: bool,
+) -> Result<(), ClientError> {
+    let mut assets_map: HashMap<_, Vec<Uuid>> = HashMap::new();
     for (id, asset) in assets.iter() {
         let date = DateTime::parse_from_rfc3339(&asset.file_created_at)?;
-        assets_tree.entry(date).or_default().push(id);
+        assets_map.entry(date).or_default().push(*id);
     }
 
-    let mut groups = Vec::<Vec<&Uuid>>::new();
     // check for assets with same timestamp
+    for group in assets_map.into_iter() {
+        if group.1.len() == 2 {
+            let mut jpeg = None;
+            let mut arw = None;
+
+            for id in &group.1 {
+                let asset = assets.get(id).unwrap();
+                if asset.original_file_name.ends_with(".JPG") {
+                    jpeg = Some((*id, asset.original_file_name.clone()));
+                } else if asset.original_file_name.ends_with(".ARW") {
+                    arw = Some((*id, asset.original_file_name.clone()));
+                }
+            }
+
+            if let (Some(jpeg), Some(arw)) = (jpeg, arw) {
+                info!("Grouping assets: {:?} {:?}", jpeg, arw);
+                if !dry_run {
+                    client.group_assets(vec![jpeg.0, arw.0], jpeg.0).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn group_bursts(
+    client: Client,
+    assets: &HashMap<Uuid, AssetResponseDto>,
+    dry_run: bool,
+) -> Result<(), ClientError> {
+    // build binary tree
+    let mut assets_tree: BTreeMap<_, Vec<Uuid>> = BTreeMap::new();
+    for (id, asset) in assets.iter() {
+        let date = DateTime::parse_from_rfc3339(&asset.file_created_at)?;
+        assets_tree.entry(date).or_default().push(*id);
+    }
+
+    let mut groups = Vec::<Vec<Uuid>>::new();
     let mut group = Vec::new();
     let mut ongoing = false;
     for (this, next) in assets_tree.iter().tuple_windows() {
@@ -250,6 +268,54 @@ async fn main() -> Result<(), ClientError> {
         }
     }
 
+    for group in groups {
+        info!("Grouping assets: {:?}", group);
+
+        if !dry_run {
+            client.group_assets(group.to_vec(), group[0]).await?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), ClientError> {
+    tracing_subscriber::fmt::init();
+
+    let opt = Opt::parse();
+
+    let configuration = Configuration::from(opt.clone());
+
+    let client = Client::new(configuration.clone());
+    let count = client.count_photos().await?;
+    info!("Library contatins {} photos.", count);
+
+    let mut assets = HashMap::with_capacity(count);
+    let buckets = client.get_buckets().await?;
+    let bar = ProgressBar::new(count as u64);
+    let mut tasks = FuturesUnordered::new();
+
+    for bucket in buckets {
+        let task = client.get_bucket(bucket);
+        tasks.push(task);
+    }
+
+    while let Some(result) = tasks.next().await.transpose().unwrap_or(None) {
+        bar.inc(result.len() as u64);
+        for asset in result {
+            let id = Uuid::parse_str(&asset.id)?;
+            assets.insert(id, asset);
+        }
+    }
+
+    bar.finish();
+    drop(tasks);
+
+    match opt.action {
+        Action::Duplicates => group_duplicates(client, &assets, opt.dry_run).await?,
+        Action::JpgArw => group_jpeg_arw(client, &assets, opt.dry_run).await?,
+        Action::Bursts => group_bursts(client, &assets, opt.dry_run).await?,
+    }
 
     Ok(())
 }
