@@ -70,8 +70,6 @@ enum ClientError {
     UuidParse(#[from] uuid::Error),
     #[error("error parsing date time: {0}")]
     DateTimeParse(#[from] chrono::ParseError),
-    #[error("error joining task: {0}")]
-    Join(#[from] tokio::task::JoinError),
     #[error("error grouping assets: {0:?}")]
     InvalidGroup((Vec<Uuid>, Uuid)),
 }
@@ -159,6 +157,7 @@ impl Client {
             AssetBulkUpdateDto {
                 ids: ids.clone(),
                 stack_parent_id: Some(ids[0]),
+                duplicate_id: Some(None),
                 ..Default::default()
             },
         )
@@ -227,7 +226,7 @@ async fn group_jpeg_arw(
             if let (Some(jpeg), Some(arw)) = (jpeg, arw) {
                 info!("Grouping assets: {:?} {:?}", jpeg, arw);
                 if !dry_run {
-                    client.group_assets(vec![jpeg.0, arw.0], jpeg.0).await?;
+                   client.group_assets(vec![jpeg.0, arw.0], jpeg.0).await?;
                 }
             }
         }
