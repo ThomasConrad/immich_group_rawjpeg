@@ -4,14 +4,15 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use openapi::{
     apis::{
-        assets_api::delete_assets,
+        assets_api::{delete_assets, update_asset, update_assets},
         configuration::{ApiKey, Configuration},
         stacks_api::create_stack,
         timeline_api::{get_time_bucket, get_time_buckets},
         Error,
     },
     models::{
-        AssetBulkDeleteDto, AssetResponseDto, StackCreateDto, TimeBucketResponseDto, TimeBucketSize,
+        AssetBulkDeleteDto, AssetBulkUpdateDto, AssetResponseDto, StackCreateDto,
+        TimeBucketResponseDto, TimeBucketSize,
     },
 };
 use std::collections::{BTreeMap, HashMap};
@@ -26,7 +27,6 @@ enum Action {
     Duplicates,
     JpgArw,
     Bursts,
-    FixTimesJpgArw,
 }
 
 #[derive(Parser, Clone)]
@@ -102,7 +102,7 @@ impl Client {
             None,
             None,
             None,
-            None,
+            Some(false),
         )
         .await?)
     }
@@ -134,7 +134,7 @@ impl Client {
             None,
             None,
             None,
-            None,
+            Some(false),
         )
         .await?)
     }
@@ -154,7 +154,7 @@ impl Client {
         if !ids.contains(&parent) {
             return Err(ClientError::InvalidGroup((ids, parent)));
         }
-        create_stack(&self.configuration, StackCreateDto { asset_ids: ids }).await?;
+        let res = create_stack(&self.configuration, StackCreateDto { asset_ids: ids }).await?;
         Ok(())
     }
 }
@@ -221,33 +221,6 @@ async fn group_jpeg_arw(
                 info!("Grouping assets: {:?} {:?}", jpeg, arw);
                 if !dry_run {
                     client.group_assets(vec![jpeg.0, arw.0], jpeg.0).await?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-async fn fix_times_jpg_arw(
-    client: Client,
-    assets: &HashMap<Uuid, AssetResponseDto>,
-    dry_run: bool,
-) -> Result<(), ClientError> {
-    for (id, asset) in assets.iter().filter(|(_, a)| {
-        a.original_file_name.ends_with(".JPG") && a.original_file_name.starts_with("DSC")
-    }) {
-        let date = DateTime::parse_from_rfc3339(&asset.file_created_at)?;
-        let exif_date = asset
-            .exif_info
-            .as_ref()
-            .and_then(|e| e.date_time_original.as_ref());
-
-        if let Some(Some(exif_date)) = exif_date {
-            let exif_date = DateTime::parse_from_rfc3339(exif_date)?;
-            if date.timestamp_millis() != exif_date.timestamp_millis() {
-                info!("Fixing time for asset: {:?}", id);
-                if !dry_run {
-                    // client.update_asset(id, exif_date).await?;
                 }
             }
         }
@@ -328,7 +301,6 @@ async fn main() -> Result<(), ClientError> {
         Action::Duplicates => group_duplicates(client, &assets, opt.dry_run).await?,
         Action::JpgArw => group_jpeg_arw(client, &assets, opt.dry_run).await?,
         Action::Bursts => group_bursts(client, &assets, opt.dry_run).await?,
-        Action::FixTimesJpgArw => fix_times_jpg_arw(client, &assets, opt.dry_run).await?,
     }
 
     Ok(())
