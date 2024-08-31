@@ -111,9 +111,9 @@ pub mod partners_api;
 pub mod people_api;
 pub mod search_api;
 pub mod server_api;
-pub mod server_info_api;
 pub mod sessions_api;
 pub mod shared_links_api;
+pub mod stacks_api;
 pub mod sync_api;
 pub mod system_config_api;
 pub mod system_metadata_api;
@@ -122,5 +122,6 @@ pub mod timeline_api;
 pub mod trash_api;
 pub mod users_api;
 pub mod users_admin_api;
+pub mod view_api;
 
 pub mod configuration;

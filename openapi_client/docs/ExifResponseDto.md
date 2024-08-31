@@ -23,6 +23,7 @@ Name | Type | Description | Notes
 **modify_date** | Option<**String**> |  | [optional]
 **orientation** | Option<**String**> |  | [optional]
 **projection_type** | Option<**String**> |  | [optional]
+**rating** | Option<**f64**> |  | [optional]
 **state** | Option<**String**> |  | [optional]
 **time_zone** | Option<**String**> |  | [optional]
 

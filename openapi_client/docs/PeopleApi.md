@@ -108,6 +108,8 @@ Name | Type | Description  | Required | Notes
 > Vec<models::AssetResponseDto> get_person_assets(id)
 
 
+This property was deprecated in v1.113.0
+
 ### Parameters
 
 

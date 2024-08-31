@@ -27,11 +27,9 @@ Name | Type | Description | Notes
 **owner** | Option<[**models::UserResponseDto**](UserResponseDto.md)> |  | [optional]
 **owner_id** | **String** |  | 
 **people** | Option<[**Vec<models::PersonWithFacesResponseDto>**](PersonWithFacesResponseDto.md)> |  | [optional]
-**resized** | **bool** |  | 
+**resized** | Option<**bool**> | This property was deprecated in v1.113.0 | [optional]
 **smart_info** | Option<[**models::SmartInfoResponseDto**](SmartInfoResponseDto.md)> |  | [optional]
-**stack** | Option<[**Vec<models::AssetResponseDto>**](AssetResponseDto.md)> |  | [optional]
-**stack_count** | Option<**i32**> |  | 
-**stack_parent_id** | Option<**String**> |  | [optional]
+**stack** | Option<[**models::AssetStackResponseDto**](AssetStackResponseDto.md)> |  | [optional]
 **tags** | Option<[**Vec<models::TagResponseDto>**](TagResponseDto.md)> |  | [optional]
 **thumbhash** | Option<**String**> |  | 
 **r#type** | [**models::AssetTypeEnum**](AssetTypeEnum.md) |  | 

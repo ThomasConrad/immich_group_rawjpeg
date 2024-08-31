@@ -11,7 +11,7 @@ Method | HTTP request | Description
 
 ## get_time_bucket
 
-> Vec<models::AssetResponseDto> get_time_bucket(size, time_bucket, album_id, is_archived, is_favorite, is_trashed, key, order, person_id, user_id, with_partners, with_stacked)
+> Vec<models::AssetResponseDto> get_time_bucket(size, time_bucket, album_id, is_archived, is_favorite, is_trashed, key, order, person_id, tag_id, user_id, with_partners, with_stacked)
 
 
 ### Parameters
@@ -28,6 +28,7 @@ Name | Type | Description  | Required | Notes
 **key** | Option<**String**> |  |  |
 **order** | Option<[**AssetOrder**](.md)> |  |  |
 **person_id** | Option<**uuid::Uuid**> |  |  |
+**tag_id** | Option<**uuid::Uuid**> |  |  |
 **user_id** | Option<**uuid::Uuid**> |  |  |
 **with_partners** | Option<**bool**> |  |  |
 **with_stacked** | Option<**bool**> |  |  |
@@ -50,7 +51,7 @@ Name | Type | Description  | Required | Notes
 
 ## get_time_buckets
 
-> Vec<models::TimeBucketResponseDto> get_time_buckets(size, album_id, is_archived, is_favorite, is_trashed, key, order, person_id, user_id, with_partners, with_stacked)
+> Vec<models::TimeBucketResponseDto> get_time_buckets(size, album_id, is_archived, is_favorite, is_trashed, key, order, person_id, tag_id, user_id, with_partners, with_stacked)
 
 
 ### Parameters
@@ -66,6 +67,7 @@ Name | Type | Description  | Required | Notes
 **key** | Option<**String**> |  |  |
 **order** | Option<[**AssetOrder**](.md)> |  |  |
 **person_id** | Option<**uuid::Uuid**> |  |  |
+**tag_id** | Option<**uuid::Uuid**> |  |  |
 **user_id** | Option<**uuid::Uuid**> |  |  |
 **with_partners** | Option<**bool**> |  |  |
 **with_stacked** | Option<**bool**> |  |  |

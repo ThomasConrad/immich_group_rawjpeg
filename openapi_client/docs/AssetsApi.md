@@ -18,7 +18,6 @@ Method | HTTP request | Description
 [**run_asset_jobs**](AssetsApi.md#run_asset_jobs) | **POST** /assets/jobs | 
 [**update_asset**](AssetsApi.md#update_asset) | **PUT** /assets/{id} | 
 [**update_assets**](AssetsApi.md#update_assets) | **PUT** /assets | 
-[**update_stack_parent**](AssetsApi.md#update_stack_parent) | **PUT** /assets/stack/parent | 
 [**upload_asset**](AssetsApi.md#upload_asset) | **POST** /assets | 
 [**view_asset**](AssetsApi.md#view_asset) | **GET** /assets/{id}/thumbnail | 
 
@@ -421,34 +420,6 @@ Name | Type | Description  | Required | Notes
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
 **asset_bulk_update_dto** | [**AssetBulkUpdateDto**](AssetBulkUpdateDto.md) |  | [required] |
-
-### Return type
-
- (empty response body)
-
-### Authorization
-
-[cookie](../README.md#cookie), [api_key](../README.md#api_key), [bearer](../README.md#bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: Not defined
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-
-## update_stack_parent
-
-> update_stack_parent(update_stack_parent_dto)
-
-
-### Parameters
-
-
-Name | Type | Description  | Required | Notes
-------------- | ------------- | ------------- | ------------- | -------------
-**update_stack_parent_dto** | [**UpdateStackParentDto**](UpdateStackParentDto.md) |  | [required] |
 
 ### Return type
 
